@@ -7,7 +7,7 @@ description: "Prepare talks and presentation decks with the user: audience-first
 
 Slides the speaker can talk over: one idea per slide, little text, the detail in the speaker notes. Claude drafts fast; the speaker owns the story. This skill gets a good first draft and then follows the speaker's directions. It never replaces their judgment about what the talk is.
 
-> Start from this file, then make it yours: every time you correct the agent, it logs the correction in `FEEDBACK.md`, and corrections you repeat become rules here. See `make-your-own.md` at the root of the repo to build your version from your own past threads.
+> Start from this file, then make it yours: every time you correct the agent, it logs the correction in `FEEDBACK.md`, and corrections you repeat become rules here. To build your version from your own past threads, use the prompt in https://github.com/louisfb01/oreilly-skills/blob/main/weeks/01-how-i-build-talks/make-your-own.md
 
 ## Load first
 

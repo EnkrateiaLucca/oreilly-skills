@@ -21,8 +21,8 @@ I want a skill for building my talks and slide decks, made from my own past corr
      from brain dump to final deck, the rules, and the checks before sending.
    - talk-decks/FEEDBACK.md: one dated entry per correction you found
      (asked, corrected in my words, lesson, status).
-   Start from https://github.com/louisfb01/talk-decks-skill if it helps, but my
-   rules win wherever they differ.
+   Start from https://github.com/louisfb01/oreilly-skills/tree/main/skills/talk-decks
+   if it helps, but my rules win wherever they differ.
 5. Show me the rules with their quotes so I can confirm each one before you save.
 
 From now on, after each deck we work on, add what I corrected to FEEDBACK.md.

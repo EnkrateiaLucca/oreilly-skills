@@ -2,6 +2,8 @@
 
 O'Reilly Skills Live, Nov 10, 2026. How I go from a brain dump to a talk I can actually give, and where I stop letting Claude drive.
 
+**Slides:** [How I build talks with Claude (PDF, 17 slides)](how-i-build-talks-with-claude-slides.pdf)
+
 **Skill:** [`talk-decks`](../../skills/talk-decks/). It's a general version of the skill I use for every talk. It gets a decent first draft in a good presentation style, then follows your directions.
 
 ![The loop: initial preparation (a talk skill), then for every talk: brain dump, plan, first draft, feedback voice notes, practice run, Google Slides](loop.png)

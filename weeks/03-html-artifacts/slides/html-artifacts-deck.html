@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTML Artifacts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ===== scene-deck engine: theme tokens =====
+   Lucas's presentation look: cream paper, near-black ink, one deep red.
+   Fraunces carries the voice, Inter the labels, Caveat the marker notes, JetBrains Mono the code. */
+:root{
+  --paper:#F5EDE0; --ink:#1F1B16; --muted:#6B5E52; --faint:#D9CCBA;
+  --accent:#9B2C2C; --accent-soft:#F5D9CF; --mark:#EBC5B6; --warn:#9B2C2C;
+  --serif:'Fraunces',Georgia,serif; --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --hand:'Caveat','Segoe Print','Bradley Hand',cursive; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --ease:cubic-bezier(.2,.7,.2,1); --t:.55s;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--paper)}
+body{font-family:var(--serif);color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;left:50%;top:50%;width:1600px;height:900px;transform-origin:center}
+
+/* ===== scenes ===== */
+.scene{position:absolute;inset:0 0 100px 0;padding:64px 90px;opacity:0;visibility:hidden;transition:opacity .45s var(--ease),visibility 0s .45s}
+.scene.active{opacity:1;visibility:visible;transition:opacity .45s var(--ease)}
+.scene.reset,.scene.reset *{transition:none!important}
+
+/* ===== type ===== */
+h1,.title{font:500 50px/1.15 var(--serif);letter-spacing:-.01em;margin:4px 0 26px}
+.lede{font:400 54px/1.3 var(--serif);max-width:1250px}
+.body{font:400 26px/1.55 var(--serif);max-width:1100px}
+.small{font:400 20px/1.5 var(--serif);color:var(--muted)}
+.label{font:400 15px/1.5 var(--sans);color:var(--muted);letter-spacing:.02em}
+.kicker{display:flex;align-items:center;gap:14px;margin-bottom:10px;font:600 18px/1.4 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+.mono{font-family:var(--mono)}
+.hand{font-family:var(--hand);font-weight:600;color:var(--accent)}
+code{font-family:var(--mono);font-size:.82em;background:color-mix(in srgb,var(--ink) 7%,transparent);padding:.04em .32em;border-radius:4px}
+.code{font:20px/1.65 var(--mono);color:var(--ink);background:color-mix(in srgb,var(--ink) 5.5%,transparent);padding:16px 22px;border-radius:6px;white-space:pre}
+.accent{color:var(--accent)} .muted{color:var(--muted)} .warn{color:var(--warn)}
+.src{position:absolute;left:90px;bottom:14px;font:italic 16px/1.4 var(--serif);color:var(--muted)}
+.abs{position:absolute}
+.row{display:flex;gap:48px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:18px}
+.card{border:1.5px solid var(--ink);padding:22px 26px;background:var(--paper)}
+.card.soft{border-color:var(--faint)}
+.card.hi{border-color:var(--accent);background:var(--accent-soft)}
+svg{overflow:visible}
+/* drawings: Inter 500 labels by default; .serif for names and numbers, .t-label for small captions,
+   .hand for marker notes, .mono for code. The colour classes below also work on .hand. */
+svg text{font-family:var(--sans);font-weight:500} svg text:not([fill]){fill:var(--ink)}
+svg text.serif{font-family:var(--serif);font-weight:400}
+svg text:is(.t-label,.mono){font-weight:400}
+svg text.hand{fill:var(--accent)}
+svg :is(text,tspan).accent{fill:var(--accent)} svg :is(text,tspan).muted{fill:var(--muted)} svg :is(text,tspan).warn{fill:var(--warn)}
+.ink{stroke:var(--ink);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ink.acc{stroke:var(--accent)} .ink.warn{stroke:var(--warn)} .ink.thin{stroke-width:1} .ink.faint{stroke:var(--faint)}
+.fill-acc{fill:var(--accent)} .fill-soft{fill:var(--accent-soft)} .fill-paper{fill:var(--paper)} .fill-ink{fill:var(--ink)}
+
+/* ===== step states =====
+   data-step=n  hidden until local step n, then animates in
+   data-fx=n    always visible; its effect (mark sweep, strike, .glow) fires at n
+   data-dim=n   ghosts to faint at n        data-out=n  disappears at n          */
+[data-step]{transition:opacity var(--t) var(--ease),transform var(--t) var(--ease)}
+[data-step]:not(.on){opacity:0;transform:translateY(10px)}
+svg [data-step]:not(.on){transform:none}
+.pop{transform-box:fill-box;transform-origin:center}
+.pop[data-step]:not(.on){transform:scale(.6)}
+.dimmed{opacity:.18!important}
+.gone{opacity:0!important;pointer-events:none}
+[data-dim],[data-out]{transition:opacity var(--t) var(--ease),transform var(--t) var(--ease)}
+
+/* draw-on strokes: any shape inside .draw traces itself; fills fade in after */
+.draw[data-step]:not(.on){opacity:1;transform:none}
+.draw-shape{stroke-dasharray:var(--len);stroke-dashoffset:0;
+  transition:stroke-dashoffset .9s var(--ease) min(calc(var(--i,0)*.12s),1.4s),fill-opacity .4s ease min(calc(var(--i,0)*.12s + .5s),1.9s)}
+.draw:not(.on) .draw-shape,.draw-shape.draw:not(.on){stroke-dashoffset:var(--len);fill-opacity:0}
+.draw text,.draw-fade{transition:opacity .4s ease .45s}
+.draw:not(.on) :is(text,.draw-fade){opacity:0}
+.draw-fade.draw[data-step]:not(.on){opacity:0}
+
+/* marker highlight + strike sweep in */
+mark{color:inherit;background:linear-gradient(var(--mark),var(--mark)) no-repeat 0 0/100% 100%;padding:0 .12em;margin:0 -.04em;transition:background-size .6s var(--ease) .15s}
+s{text-decoration:none;position:relative;white-space:nowrap}
+s::after{content:'';position:absolute;left:-.05em;right:-.05em;top:56%;height:2px;background:var(--warn);transform-origin:left;transition:transform .5s var(--ease) .1s}
+mark[data-fx]:not(.fx-on),[data-step]:not(.on) mark,mark[data-step]:not(.on){background-size:0 100%}
+s[data-fx]:not(.fx-on)::after,[data-step]:not(.on) s::after{transform:scaleX(0)}
+.glow:not([data-step]):not(.draw-shape){transition:color .4s,stroke .4s,fill .4s,border-color .4s}
+[data-step].glow{transition:opacity var(--t) var(--ease),transform var(--t) var(--ease),color .4s,fill .4s,stroke .4s,border-color .4s}
+.glow.fx-on{color:var(--accent);border-color:var(--accent)}
+svg .glow.fx-on:not(text){stroke:var(--accent)} svg text.glow.fx-on{fill:var(--accent)}
+
+/* ambient motion */
+.spin{animation:spin 7s linear infinite;transform-box:fill-box;transform-origin:center}
+.float{animation:float 3.2s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes float{50%{transform:translateY(-6px)}}
+.sketch{filter:url(#sketch)}
+
+/* ===== timeline ===== */
+#timeline{position:absolute;left:90px;right:90px;bottom:26px;height:56px;cursor:pointer;touch-action:none}
+#timeline .rail,#timeline .fill{position:absolute;left:0;top:40px;height:2px;background:var(--faint)}
+#timeline .rail{right:0}
+#timeline .fill{background:var(--accent);transition:width var(--t) var(--ease)}
+.dot{position:absolute;top:36px;width:10px;height:10px;margin-left:-5px;border-radius:50%;border:1.5px solid var(--faint);background:var(--paper);transition:.3s}
+.dot.past{background:var(--accent);border-color:var(--accent)}
+.dot b{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font:400 13px var(--sans);color:var(--muted)}
+.dot i{position:absolute;bottom:34px;left:50%;transform:translateX(-50%);white-space:nowrap;font:italic 15px var(--serif);color:var(--ink);background:var(--paper);padding:2px 8px;opacity:0;transition:opacity .2s;pointer-events:none}
+.dot:hover i{opacity:1}
+#mascot{position:absolute;top:9px;width:32px;margin-left:-16px;color:var(--ink);transition:left var(--t) var(--ease);pointer-events:none}
+#mascot svg{display:block;width:32px;height:32px;transform-origin:50% 100%}
+#mascot.back svg{transform:scaleX(-1)}
+#mascot.walk svg{animation:waddle .2s ease-in-out infinite alternate}
+#mascot .eye{transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+@keyframes waddle{from{rotate:-8deg}to{rotate:8deg;translate:0 -1.5px}}
+@keyframes blink{0%,95%,100%{scale:1 1}97.5%{scale:1 .1}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="sketch"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+  <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:var(--ink)" stroke-width="1.2"/></pattern>
+</svg>
+
+<div id="stage">
+<!-- ===================== SCENES START ===================== -->
+<style>
+.shot{display:block;border:1.5px solid var(--ink);background:var(--paper);padding:7px;box-shadow:7px 7px 0 var(--faint)}
+.shot img{display:block;width:100%}
+.tl{rotate:-1.4deg} .tr{rotate:1.2deg}
+a.live{font:600 14px/1.4 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);text-decoration:none;border-bottom:1.5px solid var(--accent);white-space:nowrap;align-self:flex-start}
+a.live:hover{background:var(--accent-soft)}
+.chip{display:inline-block;font:500 20px/1 var(--sans);border:1.5px solid var(--ink);padding:12px 18px;border-radius:999px;background:var(--paper)}
+.chip.sm{font-size:16px;padding:9px 14px}
+.chip.hi{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.ex{font:500 26px/1.2 var(--serif)}
+.cap{font:400 17px/1.45 var(--sans);color:var(--muted);margin-top:6px}
+.verb{font:500 64px/1 var(--serif)}
+.term{background:color-mix(in srgb,var(--ink) 5.5%,transparent);border-radius:8px;overflow:hidden;border:1.5px solid var(--ink)}
+.term .bar{font:500 15px var(--sans);color:var(--muted);padding:12px 18px;border-bottom:1px solid var(--faint)}
+.term .scroll{font:16px/1.65 var(--mono);white-space:pre;padding:12px 18px;animation:scrollup 46s linear infinite}
+@keyframes scrollup{to{transform:translateY(-50%)}}
+.cursor::after{content:'▍';animation:blink2 1s steps(1) infinite}
+@keyframes blink2{50%{opacity:0}}
+.num{display:inline-flex;flex:none;width:36px;height:36px;border-radius:50%;background:var(--accent);color:var(--paper);font:600 18px/36px var(--sans);justify-content:center}
+.frame{border:1.5px solid var(--ink);border-radius:8px;background:var(--paper);overflow:hidden;box-shadow:7px 7px 0 var(--faint)}
+.frame .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1.5px solid var(--ink)}
+.frame .bar i{width:11px;height:11px;border:1.5px solid var(--ink);border-radius:50%}
+.frame .bar span{font:15px var(--mono);color:var(--muted);margin-left:10px}
+.frame img{display:block;width:100%}
+.step-row{display:flex;gap:18px;align-items:flex-start}
+</style>
+
+<!-- ============ 1 · INTRO ============ -->
+<section class="scene" data-chapter="Intro">
+  <span class="kicker">Agent Skills Live · Session 3 · Lucas Soares &amp; Louis-François Bouchard</span>
+  <p class="lede" style="font-size:110px;line-height:1.02;margin-top:80px">HTML<br><mark data-fx="1">artifacts</mark></p>
+  <p class="body" data-step="1" style="margin-top:44px;max-width:640px">Pages your agent builds so you can see its work, steer it, and hand it back.</p>
+  <svg class="abs sketch" style="left:930px;top:150px" width="570" height="470" viewBox="0 0 570 470">
+    <g class="draw" data-step="2">
+      <rect class="ink fill-paper" x="10" y="10" width="550" height="420" rx="8"/>
+      <path class="ink" d="M10 48 H560"/>
+      <circle class="ink" cx="34" cy="29" r="7"/><circle class="ink" cx="56" cy="29" r="7"/><circle class="ink" cx="78" cy="29" r="7"/>
+      <path class="ink" d="M50 250 C120 250 140 120 210 120 C280 120 290 200 340 200 C390 200 410 90 500 90"/>
+      <path class="ink thin" d="M50 280 H510"/>
+      <path class="ink" d="M50 350 H290"/><circle class="ink fill-paper" cx="200" cy="350" r="15"/>
+      <rect class="ink acc" x="340" y="326" width="170" height="50" rx="6" style="fill:var(--accent-soft)"/>
+    </g>
+    <circle cx="210" cy="120" r="8" class="fill-acc" data-step="2"/>
+    <text x="425" y="358" text-anchor="middle" font-size="19" class="accent" data-step="2">Copy ↩</text>
+    <text x="50" y="330" class="t-label muted" font-size="15" data-step="2">tweak me</text>
+    <text x="560" y="466" text-anchor="end" class="hand" font-size="32" data-step="3">this deck is one too</text>
+  </svg>
+  <p class="src">Lucas Soares · Automata Learning Lab · O’Reilly · 24 Nov 2026</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">the problem</span>
+  <h1>Your agent just finished.</h1>
+  <div class="term abs" data-step="1" style="left:90px;top:200px;width:760px;height:520px">
+    <div class="bar">claude code · plan.md</div>
+    <div style="height:470px;overflow:hidden;position:relative"><div class="scroll"># Plan: Work email assistant
+## Context
+- 2 requests: schedule check, semi-automatic replies
+- sources: Gmail (gws), Calendar, vault notes
+## Step 1 · Morning scan
+- launchd runs scan.py at 08:30
+- find threads where the last message is not mine
+- group by sender: producers, book, sponsors, other
+- write Work Inbox.md with sender, subject, age
+- if the gws token expired, write a login note
+## Step 2 · /work-inbox drafts
+- read each thread in full
+- pick a playbook rule per sender group
+- draft a reply in the thread (In-Reply-To headers)
+- never send; drafts only
+## Step 3 · Calendar check
+- parse date proposals (PT → Lisbon)
+- query Calendar for conflicts ±1h
+- flag trips and travel days
+- ask before saying yes to a conflict
+## Step 4 · Playbook
+- producers: slides, repo links, prerequisites
+- book: no draft, I answer
+- sponsors: route to /sponsor-reply
+- unknown senders: skip
+## Open decisions
+- [ ] scan at 08:30 only, or also 14:00?
+- [ ] may Claude send a plain &quot;yes&quot; alone?
+- [ ] what counts as a calendar conflict?
+- [ ] which senders does the scan watch?
+## Risks
+- a sent email cannot come back
+- OAuth token expires every 7 days
+- background claude -p may not authenticate
+## Files
+- skills/work-inbox/SKILL.md
+- skills/work-inbox/playbook.md
+- scripts/scan.py · launchd plist
+## Tests
+- dry run on last week&#x27;s inbox
+- check replies thread correctly in Gmail
+- check drafts keep the original subject
+...
+# Plan: Work email assistant
+## Context
+- 2 requests: schedule check, semi-automatic replies
+- sources: Gmail (gws), Calendar, vault notes
+## Step 1 · Morning scan
+- launchd runs scan.py at 08:30
+- find threads where the last message is not mine
+- group by sender: producers, book, sponsors, other
+- write Work Inbox.md with sender, subject, age
+- if the gws token expired, write a login note
+## Step 2 · /work-inbox drafts
+- read each thread in full
+- pick a playbook rule per sender group
+- draft a reply in the thread (In-Reply-To headers)
+- never send; drafts only
+## Step 3 · Calendar check
+- parse date proposals (PT → Lisbon)
+- query Calendar for conflicts ±1h
+- flag trips and travel days
+- ask before saying yes to a conflict
+## Step 4 · Playbook
+- producers: slides, repo links, prerequisites
+- book: no draft, I answer
+- sponsors: route to /sponsor-reply
+- unknown senders: skip
+## Open decisions
+- [ ] scan at 08:30 only, or also 14:00?
+- [ ] may Claude send a plain &quot;yes&quot; alone?
+- [ ] what counts as a calendar conflict?
+- [ ] which senders does the scan watch?
+## Risks
+- a sent email cannot come back
+- OAuth token expires every 7 days
+- background claude -p may not authenticate
+## Files
+- skills/work-inbox/SKILL.md
+- skills/work-inbox/playbook.md
+- scripts/scan.py · launchd plist
+## Tests
+- dry run on last week&#x27;s inbox
+- check replies thread correctly in Gmail
+- check drafts keep the original subject
+...
+</div>
+      <div class="mono" data-step="4" style="position:absolute;left:0;right:0;bottom:0;padding:14px 18px;background:var(--paper);border-top:1.5px solid var(--ink);font-size:19px">› Approve this plan? (y/n) <span class="cursor"></span></div>
+    </div>
+  </div>
+  <p class="hand abs" data-step="2" style="left:910px;top:200px;font-size:50px">412 lines</p>
+  <div class="abs col" data-step="3" style="left:910px;top:290px;gap:14px">
+    <span class="chip" style="align-self:flex-start">5 new files to check</span>
+    <span class="chip hi" style="align-self:flex-start">4 open decisions, buried at line 31</span>
+  </div>
+  <p class="lede abs" data-step="5" style="left:910px;top:470px;font-size:48px;width:590px">So you <s data-fx="6">review</s> <span data-step="6" class="accent">skim</span> it<span data-step="6">,<br>and type <code>y</code>.</span></p>
+</section>
+
+<section class="scene">
+  <span class="kicker">the same plan, as an artifact</span>
+  <h1>Built to be digested</h1>
+  <div class="abs col" style="left:90px;top:200px;width:430px;gap:30px">
+    <div class="code" data-step="1" data-dim="2" style="font-size:17px">plan.md · 412 lines</div>
+    <div class="step-row" data-step="3"><span class="num">1</span><span class="body" style="font-size:23px;line-height:1.4">One sentence per step, folded until you open it</span></div>
+    <div class="step-row" data-step="4"><span class="num">2</span><span class="body" style="font-size:23px;line-height:1.4">Each decision sits on the step it changes</span></div>
+    <div class="step-row" data-step="5"><span class="num">3</span><span class="body" style="font-size:23px;line-height:1.4">Answer, press <b style="font-weight:500">Respond</b>, the agent gets it back</span></div>
+    <p class="hand" data-step="6" style="font-size:38px;rotate:-2deg">read it in a minute</p>
+  </div>
+  <div class="abs shot tr" data-step="2" style="left:560px;top:180px;width:876px"><img src="shots/art-plan.png" alt="html-plan artifact"></div>
+  <span class="num abs pop" data-step="3" style="left:744px;top:300px">1</span>
+  <span class="num abs pop" data-step="4" style="left:1335px;top:292px">2</span>
+  <span class="num abs pop" data-step="5" style="left:1262px;top:682px">3</span>
+  <p class="src">made with the html-plan skill</p>
+</section>
+
+<!-- ============ 2 · BACKGROUND ============ -->
+<section class="scene" data-chapter="Background">
+  <span class="kicker">a bit of history</span>
+  <h1>HTML is the web's native format</h1>
+  <svg class="sketch" width="1420" height="230" viewBox="0 0 1420 230">
+    <path class="ink draw" data-step="1" d="M20 110 H1400 M1388 102 L1400 110 L1388 118"/>
+    <g data-step="1"><circle cx="140" cy="110" r="10" class="fill-ink"/><text x="140" y="72" text-anchor="middle" class="serif" font-size="36">1991</text><text x="140" y="158" text-anchor="middle" font-size="19">the first web page</text></g>
+    <g data-step="2"><circle cx="620" cy="110" r="10" class="fill-ink"/><text x="620" y="72" text-anchor="middle" class="serif" font-size="36">2008</text><text x="620" y="158" text-anchor="middle" font-size="19">Chrome + HTML5:</text><text x="620" y="184" text-anchor="middle" font-size="19">pages become apps</text></g>
+    <g data-step="3"><circle cx="1110" cy="110" r="12" class="fill-acc"/><text x="1110" y="72" text-anchor="middle" class="serif accent" font-size="36">2020s</text><text x="1110" y="158" text-anchor="middle" font-size="19">models learn from the web,</text><text x="1110" y="184" text-anchor="middle" font-size="19" class="accent">so they write HTML fluently</text></g>
+  </svg>
+  <svg class="sketch" width="1420" height="270" viewBox="0 0 1420 270" style="margin-top:20px">
+    <g class="draw" data-step="4"><path class="ink acc" d="M60 30 H150 L180 60 V180 H60 Z M150 30 V60 H180"/><path class="ink thin" d="M80 90 H160 M80 112 H160 M80 134 H140"/></g>
+    <text x="120" y="222" text-anchor="middle" class="mono" font-size="20" data-step="4">tool.html</text>
+    <path class="ink draw" data-step="4" d="M210 105 C300 105 320 70 420 70 M210 105 H560 M210 105 C320 105 380 140 700 140"/>
+    <g class="draw" data-step="4"><rect class="ink" x="440" y="30" width="120" height="78" rx="4"/><path class="ink" d="M420 116 H580"/>
+      <rect class="ink" x="590" y="60" width="44" height="80" rx="7"/>
+      <rect class="ink" x="720" y="80" width="110" height="80" rx="7"/></g>
+    <text x="900" y="96" class="serif" font-size="34" data-step="4">One file opens on every device.</text>
+    <text x="900" y="150" class="hand" font-size="36" data-step="4">nothing to install</text>
+  </svg>
+</section>
+
+<section class="scene">
+  <span class="kicker">Dec 2025 · Simon Willison</span>
+  <h1>“Useful patterns for building HTML tools”</h1>
+  <div class="abs shot tl" data-step="1" style="left:90px;top:205px;width:640px"><img src="shots/simon-post.png" alt="Simon Willison's HTML tools post"></div>
+  <a class="live abs" data-step="1" href="https://simonwillison.net/2025/Dec/10/html-tools/" target="_blank" style="left:100px;top:640px">read the post ↗</a>
+  <div class="abs col" style="left:790px;top:205px;width:710px;gap:22px">
+    <p class="lede" data-step="2" style="font-size:38px">“A few hundred lines of code that can be <mark>cleanly copied and pasted</mark> into a GitHub repository.”</p>
+    <p class="body" data-step="3" style="font-size:24px">Over <b style="font-weight:500">150</b> built in two years, <span class="accent">almost all written by LLMs</span>.</p>
+  </div>
+  <div class="abs shot tr" data-step="4" style="left:1080px;top:452px;width:420px"><img src="shots/simon-tools.png" alt="tools.simonwillison.net"></div>
+  <p class="hand abs" data-step="4" style="left:800px;top:560px;font-size:38px;rotate:-3deg">245 tools today →</p>
+  <p class="src">simonwillison.net/2025/Dec/10/html-tools · tools.simonwillison.net</p>
+</section>
+
+<section class="scene">
+  <h1>Why one HTML file works</h1>
+  <svg class="sketch" width="1420" height="560" viewBox="0 0 1420 560">
+    <g class="draw" data-step="1"><path class="ink fill-paper" d="M520 80 H850 L900 130 V470 H520 Z M850 80 V130 H900"/><path class="ink thin" d="M540 220 H880 M540 345 H880"/></g>
+    <text x="700" y="118" text-anchor="middle" class="mono" font-size="22" data-step="1">tool.html</text>
+    <g data-step="1" text-anchor="middle"><text x="710" y="175" class="serif" font-size="30">HTML</text><text x="710" y="200" class="t-label muted" font-size="16">structure</text>
+      <text x="710" y="290" class="serif" font-size="30">CSS</text><text x="710" y="315" class="t-label muted" font-size="16">look</text>
+      <text x="710" y="415" class="serif" font-size="30">JS</text><text x="710" y="440" class="t-label muted" font-size="16">behaviour</text></g>
+    <g data-step="2"><path class="ink draw" data-step="2" d="M300 175 H505 M493 167 L505 175 L493 183 M300 290 H505 M493 282 L505 290 L493 298 M300 410 H505 M493 402 L505 410 L493 418"/>
+      <text x="280" y="182" text-anchor="end" font-size="22">paste text</text><text x="280" y="297" text-anchor="end" font-size="22">drop a file</text><text x="280" y="417" text-anchor="end" font-size="22">state in the URL</text>
+      <text x="60" y="110" class="hand" font-size="32">in</text></g>
+    <g data-step="3"><path class="ink acc draw" data-step="3" d="M915 175 H1110 M1098 167 L1110 175 L1098 183 M915 290 H1110 M1098 282 L1110 290 L1098 298 M915 410 H1110 M1098 402 L1110 410 L1098 418"/>
+      <text x="1130" y="182" font-size="22" class="accent">Copy button</text><text x="1130" y="297" font-size="22">download .csv / .svg</text><text x="1130" y="417" font-size="22">share one link</text>
+      <text x="1330" y="110" class="hand" font-size="32">out</text></g>
+    <g data-step="4"><path class="ink draw" data-step="4" d="M710 40 V72 M702 60 L710 72 L718 60" stroke-dasharray="5 5"/><text x="730" y="38" font-size="20">a few CDN libraries, versions pinned</text></g>
+    <text x="710" y="530" text-anchor="middle" class="hand" font-size="36" data-step="5">no build step · no server · any model can rewrite it</text>
+  </svg>
+  <p class="src">after Simon Willison · Useful patterns for building HTML tools</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">2026 · Thariq Shihipar, Anthropic</span>
+  <h1>The unreasonable effectiveness of HTML</h1>
+  <div class="col" style="gap:16px;width:600px;margin-top:4px">
+    <div class="code" data-step="1" style="font-size:20px">› write the plan as an <mark>HTML file</mark></div>
+    <p class="body" data-step="2" style="font-size:23px;line-height:1.45">↓ Claude Code pulls in files, git history, screenshots</p>
+    <p class="body" data-step="3" style="font-size:23px;line-height:1.45">↓ <code>plan.html</code> opens in your browser</p>
+    <p class="body" data-step="4" style="font-size:23px;margin-top:10px"><b style="font-weight:500">20 demos</b> across <b style="font-weight:500">9 kinds</b> of work</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap">
+      <span class="chip sm" data-step="4">Exploration</span><span class="chip sm" data-step="4">Code review</span><span class="chip sm" data-step="4">Design</span>
+      <span class="chip sm" data-step="4">Prototypes</span><span class="chip sm" data-step="4">Diagrams</span><span class="chip sm" data-step="4">Decks</span>
+      <span class="chip sm" data-step="4">Learning</span><span class="chip sm" data-step="4">Reports</span>
+      <span class="chip sm glow" data-step="4" data-fx="5" style="font-size:19px">Custom editors</span>
+    </div>
+  </div>
+  <div class="abs shot tr" style="left:760px;top:200px;width:740px"><img src="shots/thariq-index.png" alt="Thariq's HTML effectiveness gallery"></div>
+  <a class="live abs" href="https://thariqs.github.io/html-effectiveness/" target="_blank" style="left:770px;top:690px">open the gallery ↗</a>
+  <p class="src">thariqs.github.io/html-effectiveness</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">from Thariq's gallery</span>
+  <h1>Two worth stealing</h1>
+  <div class="row" style="gap:50px;margin-top:4px">
+    <div class="col" data-step="1" style="width:680px;gap:8px">
+      <div class="shot tl"><img src="shots/thariq-01.png" alt="three approaches side by side"></div>
+      <span class="ex" style="margin-top:10px">Three approaches, side by side</span><span class="cap">fan out N options, then point at one</span>
+      <a class="live" href="https://thariqs.github.io/html-effectiveness/01-exploration-code-approaches.html" target="_blank">open ↗</a>
+    </div>
+    <div class="col" data-step="2" style="width:680px;gap:8px">
+      <div class="shot tr" style="margin-top:16px"><img src="shots/thariq-20.png" alt="prompt tuner"></div>
+      <span class="ex" style="margin-top:10px">Prompt tuner</span><span class="cap">edit the prompt left, live samples right, Copy it back</span>
+      <a class="live" href="https://thariqs.github.io/html-effectiveness/20-editor-prompt-tuner.html" target="_blank">open ↗</a>
+    </div>
+  </div>
+  <p class="hand abs" data-step="3" style="left:1040px;top:110px;font-size:40px;rotate:-2deg">both end with you choosing</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">today · claude.ai</span>
+  <h1>Claude artifacts: the mainstream version</h1>
+  <div class="abs frame" data-step="1" style="left:90px;top:200px;width:760px">
+    <div class="bar"><i></i><i></i><i></i><span>claude.ai/artifact/…</span></div>
+    <img src="shots/art-lasrozas.png" alt="Las Rozas mobility plan artifact">
+  </div>
+  <div class="abs col" style="left:910px;top:210px;width:590px;gap:28px">
+    <div class="step-row" data-step="2"><span class="num">1</span><span class="body" style="font-size:24px;line-height:1.4">You ask in chat or in Claude Code</span></div>
+    <div class="step-row" data-step="3"><span class="num">2</span><span class="body" style="font-size:24px;line-height:1.4">Claude builds the page</span></div>
+    <div class="step-row" data-step="4"><span class="num">3</span><span class="body" style="font-size:24px;line-height:1.4">You get a private link you can share</span></div>
+    <div class="step-row" data-step="5"><span class="num">4</span><span class="body" style="font-size:24px;line-height:1.4">The page can remember things, keep shared data, even ask Claude</span></div>
+    <p class="hand" data-step="6" style="font-size:38px;rotate:-2deg">no file to send, nothing to host</p>
+  </div>
+  <a class="live abs" data-step="1" href="https://claude.ai/artifact/UfR2P2SrJVsM2KbYqmb6vH" target="_blank" style="left:100px;top:722px">open ↗</a>
+</section>
+
+<section class="scene">
+  <p class="label" style="font-size:18px;margin-top:20px">My working definition</p>
+  <p class="lede" data-step="1" style="margin-top:10px">One HTML file the agent builds for one job:</p>
+  <svg width="1420" height="420" viewBox="0 0 1420 420" style="margin-top:30px" class="sketch">
+    <g data-step="2">
+      <g class="draw" data-step="2"><path class="ink" d="M60 110 Q160 30 260 110 Q160 190 60 110 Z"/><circle class="ink" cx="160" cy="110" r="30"/><circle class="fill-ink" cx="160" cy="110" r="10"/></g>
+      <text x="60" y="290" class="serif" font-size="58">to look at.</text>
+    </g>
+    <g data-step="3">
+      <g class="draw" data-step="3"><path class="ink" d="M520 110 H760"/><circle class="ink fill-paper" cx="610" cy="110" r="18"/><rect class="ink" x="520" y="160" width="110" height="40" rx="6"/><path class="ink thin" d="M520 60 H760"/><circle class="ink fill-paper" cx="700" cy="60" r="12"/></g>
+      <text x="520" y="290" class="serif" font-size="58">to use.</text>
+    </g>
+    <g data-step="4">
+      <g class="draw" data-step="4"><rect class="ink acc" x="960" y="50" width="160" height="120" rx="6"/><path class="ink acc" d="M1140 110 C1240 110 1240 230 1120 230 H1000 M1016 218 L1000 230 L1016 242"/></g>
+      <text x="960" y="290" class="serif accent" font-size="58">to hand back.</text>
+      <text x="975" y="350" class="hand" font-size="34">the one to remember</text>
+    </g>
+  </svg>
+</section>
+
+<!-- ============ 3 · WHY HTML ============ -->
+<section class="scene" data-chapter="Why HTML">
+  <h1>Why HTML, not Markdown?</h1>
+  <pre class="code abs" style="left:90px;top:170px;width:470px;font-size:17px;line-height:1.6"># Plan: checkout refactor
+## Step 1
+- split auth from billing
+- migrate sessions table
+## Step 2
+- add retry to webhooks
+
++---------+     +-------+
+| client  |---->|  api  |
++---------+     +---+---+
+                    |
+                +---v---+
+                |  db   |
+                +-------+
+## Risks
+- ...line 18 of 412</pre>
+  <p class="body abs" data-step="6" style="left:90px;top:640px"><s data-fx="6">Markdown is cheaper.</s> <span class="hand" style="font-size:34px;margin-left:10px">HTML gets read.</span></p>
+  <svg class="abs sketch" style="left:620px;top:160px" width="900" height="560" viewBox="0 0 900 560">
+    <g class="draw" data-step="1">
+      <rect class="ink fill-paper" x="10" y="10" width="560" height="440" rx="8"/>
+      <path class="ink" d="M10 46 H570"/>
+      <circle class="ink" cx="32" cy="28" r="6"/><circle class="ink" cx="52" cy="28" r="6"/><circle class="ink" cx="72" cy="28" r="6"/>
+    </g>
+    <text x="100" y="35" class="mono t-label muted" font-size="16" data-step="1">plan.html</text>
+    <g data-step="2"><g class="draw" data-step="2"><rect class="ink acc" x="40" y="66" width="90" height="34" rx="4"/><rect class="ink thin" x="140" y="66" width="90" height="34" rx="4"/><rect class="ink thin" x="240" y="66" width="110" height="34" rx="4"/></g>
+      <text x="85" y="89" text-anchor="middle" font-size="15" class="accent">Plan</text><text x="185" y="89" text-anchor="middle" font-size="15">Risks</text><text x="295" y="89" text-anchor="middle" font-size="15">Timeline</text>
+      <text x="620" y="80" class="serif" font-size="30">Readability</text><text x="620" y="106" class="t-label muted" font-size="17">tabs, figures, links</text></g>
+    <g data-step="3"><g class="draw" data-step="3">
+        <path class="ink" d="M40 130 V280 H290"/>
+        <rect class="ink" x="60" y="220" width="34" height="60" style="fill:url(#hatch)"/><rect class="ink" x="110" y="180" width="34" height="100" style="fill:url(#hatch)"/><rect class="ink acc" x="160" y="150" width="34" height="130" style="fill:var(--accent-soft)"/><rect class="ink" x="210" y="200" width="34" height="80" style="fill:url(#hatch)"/>
+        <rect class="ink" x="330" y="140" width="90" height="44" rx="4"/><rect class="ink" x="450" y="140" width="90" height="44" rx="4"/><rect class="ink" x="390" y="230" width="90" height="44" rx="4"/>
+        <path class="ink thin" d="M420 162 H450 M375 184 V252 H390"/></g>
+      <text x="375" y="167" text-anchor="middle" font-size="14">client</text><text x="495" y="167" text-anchor="middle" font-size="14">api</text><text x="435" y="257" text-anchor="middle" font-size="14">db</text>
+      <text x="620" y="200" class="serif" font-size="30">Density</text><text x="620" y="226" class="t-label muted" font-size="17">SVG, charts, tables, one file</text></g>
+    <g data-step="4"><g class="draw" data-step="4"><path class="ink" d="M40 360 H300"/><circle class="ink fill-paper" cx="200" cy="360" r="14"/><rect class="ink acc" x="360" y="336" width="170" height="48" rx="6" style="fill:var(--accent-soft)"/></g>
+      <text x="40" y="335" class="t-label muted" font-size="15">risk tolerance</text>
+      <text x="445" y="366" text-anchor="middle" font-size="18" class="accent">Copy ↩</text>
+      <text x="620" y="350" class="serif accent" font-size="30">Two-way</text><text x="620" y="376" class="t-label muted" font-size="17">tune it, then hand it back</text></g>
+    <g data-step="5"><text x="10" y="500" class="serif" font-size="30">Shareability</text><text x="200" y="500" class="t-label muted" font-size="17">one file = one link, opens in any browser</text></g>
+  </svg>
+  <p class="src">framing: Thariq Shihipar · The Unreasonable Effectiveness of HTML</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">reason 1 · drifting attention</span>
+  <h1>Agents do more. We read less.</h1>
+  <svg class="sketch" width="900" height="500" viewBox="0 0 900 500">
+    <g class="draw"><path class="ink" d="M60 20 V440 H870"/><path class="ink" d="M52 32 L60 20 L68 32 M858 432 L870 440 L858 448"/></g>
+    <text x="76" y="34" class="t-label muted" font-size="17">lines to review ↑</text>
+    <text x="870" y="474" class="t-label muted" font-size="17" text-anchor="end">agent autonomy →</text>
+    <path class="ink draw" data-step="1" d="M70 420 C300 400 600 230 840 50" style="stroke-width:2.4"/>
+    <text x="700" y="80" font-size="20" data-step="1" text-anchor="end">what the agent writes</text>
+    <path class="ink acc draw" data-step="2" d="M70 400 C300 350 600 350 840 362" style="stroke-width:2.4"/>
+    <text x="840" y="400" font-size="20" class="accent" data-step="2" text-anchor="end">what we actually read</text>
+    <path data-step="3" d="M70 400 C300 350 600 350 840 362 L840 50 C600 230 300 400 70 420 Z" style="fill:url(#hatch);opacity:.35"/>
+    <text x="640" y="270" class="hand" font-size="38" data-step="3">unreviewed</text>
+  </svg>
+  <div class="abs col" style="left:1030px;top:210px;width:470px;gap:26px">
+    <p class="body" data-step="4" style="font-size:24px;line-height:1.45">“As Claude takes on more, I'd noticed I was <mark>reading plans less closely</mark>.”<br><span class="label" style="font-size:16px">Thariq Shihipar</span></p>
+    <p class="lede" data-step="5" style="font-size:40px;line-height:1.25">A page you <i>want</i> to look at keeps you <span class="accent">in the loop</span>.</p>
+  </div>
+  <p class="src">curves illustrative</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">reason 2 · active reading</span>
+  <h1>Touching beats reading</h1>
+  <svg class="sketch" width="1420" height="420" viewBox="0 0 1420 420">
+    <g data-step="1">
+      <g class="draw" data-step="1"><path class="ink" d="M80 20 H300 L330 50 V330 H80 Z M300 20 V50 H330"/><path class="ink thin" d="M105 80 H300 M105 105 H300 M105 130 H270 M105 155 H300 M105 180 H240 M105 205 H300 M105 230 H280 M105 255 H300 M105 280 H220"/>
+        <path class="ink" d="M380 170 Q440 120 500 170 Q440 220 380 170 Z"/><circle class="ink" cx="440" cy="170" r="16"/></g>
+      <path class="ink thin draw" data-step="1" d="M380 150 C340 120 320 110 300 110" stroke-dasharray="4 5"/>
+      <text x="80" y="385" class="serif" font-size="28">Reading</text><text x="210" y="385" class="t-label muted" font-size="18">your eyes slide past it</text>
+    </g>
+    <g data-step="2">
+      <g class="draw" data-step="2"><rect class="ink" x="640" y="20" width="230" height="320" rx="6"/><rect class="ink" x="890" y="20" width="230" height="320" rx="6"/><rect class="ink" x="1140" y="20" width="230" height="320" rx="6"/>
+        <rect class="ink fill-paper" x="660" y="70" width="190" height="48" rx="4"/><rect class="ink fill-paper" x="660" y="130" width="190" height="48" rx="4"/>
+        <rect class="ink fill-paper" x="910" y="70" width="190" height="48" rx="4"/><rect class="ink fill-paper" x="1160" y="70" width="190" height="48" rx="4"/><rect class="ink fill-paper" x="1160" y="130" width="190" height="48" rx="4"/></g>
+      <text x="755" y="52" text-anchor="middle" font-size="18">Now</text><text x="1005" y="52" text-anchor="middle" font-size="18">Next</text><text x="1255" y="52" text-anchor="middle" font-size="18">Later</text>
+      <text x="640" y="385" class="serif accent" font-size="28">Manipulating</text><text x="830" y="385" class="t-label muted" font-size="18">every card needs a decision</text>
+    </g>
+    <g data-step="3"><g class="float"><rect class="ink acc" x="960" y="200" width="200" height="50" rx="4" style="fill:var(--accent-soft);rotate:-5deg;transform-box:fill-box;transform-origin:center"/><text x="1060" y="230" text-anchor="middle" font-size="16" class="accent">migrate sessions?</text></g>
+      <path class="ink acc draw" data-step="3" d="M1165 250 C1200 290 1230 250 1240 200 M1230 212 L1240 198 L1250 212"/></g>
+  </svg>
+  <p class="lede" data-step="4" style="font-size:46px;margin-top:10px">You can't drag a card <mark>without reading it</mark>.</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">reason 3 · anchoring · a randomized trial, Anthropic 2026</span>
+  <h1>Who made the call?</h1>
+  <div class="row" style="gap:110px;margin-top:10px">
+    <div class="col" style="width:470px;gap:6px">
+      <span data-step="1" class="pop" style="font:500 170px/1 var(--serif);color:var(--accent)">86%</span>
+      <span data-step="1" class="body" style="font-size:24px">of open decisions went the agent's way</span>
+      <span data-step="2" class="label" style="font-size:18px">chance: 50% · the agent's lean was set by coin flip · 50 analysts</span>
+    </div>
+    <div class="col" style="gap:26px;margin-top:30px;width:780px">
+      <div data-step="3" data-dim="5"><span style="font:500 44px/1 var(--serif)">77%</span><span class="body" style="font-size:24px;margin-left:16px">repeated the agent's argument as their own</span></div>
+      <div data-step="4" data-dim="5"><span style="font:500 44px/1 var(--serif)">15%</span><span class="body" style="font-size:24px;margin-left:16px">credited the agent</span></div>
+      <p data-step="5" class="lede" style="font-size:44px;margin-top:10px">Looking isn't enough.<br>The page has to <mark>ask for your input</mark>.</p>
+      <div class="row" data-step="6" style="gap:12px;flex-wrap:wrap"><span class="chip sm">text boxes</span><span class="chip sm">sliders</span><span class="chip sm">editors</span><span class="chip sm hi">your pick first, then the agent's</span></div>
+    </div>
+  </div>
+  <p class="src">Anthropic · How AI agents shape experts' judgment calls (2026) · one task, lean strengthened on purpose</p>
+</section>
+
+<!-- ============ 4 · SKILLS ============ -->
+<section class="scene" data-chapter="+ Skills">
+  <h1>Where do skills fit?</h1>
+  <svg class="sketch" width="1420" height="400" viewBox="0 0 1420 400">
+    <g data-step="1"><g class="draw" data-step="1"><path class="ink" d="M60 90 H140 L170 120 V230 H60 Z M140 90 V120 H170 M80 150 H150 M80 172 H150 M80 194 H130"/></g>
+      <text x="115" y="280" text-anchor="middle" class="serif" font-size="28">SKILL.md</text><text x="115" y="306" text-anchor="middle" class="t-label muted" font-size="17">the recipe</text></g>
+    <path class="ink draw" data-step="2" d="M195 160 H360 M348 152 L360 160 L348 168"/>
+    <g data-step="2"><g class="draw" data-step="2"><circle class="ink" cx="440" cy="160" r="58"/><path class="ink" d="M440 122 L450 150 L478 160 L450 170 L440 198 L430 170 L402 160 L430 150 Z"/></g>
+      <text x="440" y="280" text-anchor="middle" class="serif" font-size="28">agent</text><text x="440" y="306" text-anchor="middle" class="t-label muted" font-size="17">runs it</text></g>
+    <path class="ink draw" data-step="3" d="M520 160 H680 M668 152 L680 160 L668 168"/>
+    <g data-step="3"><g class="draw" data-step="3"><rect class="ink acc" x="700" y="90" width="190" height="140" rx="6"/><path class="ink acc" d="M700 115 H890"/><rect class="ink thin" x="720" y="135" width="70" height="75"/><path class="ink thin" d="M805 145 H870 M805 165 H870 M805 185 H850"/></g>
+      <text x="795" y="280" text-anchor="middle" class="serif accent" font-size="28">artifact.html</text><text x="795" y="306" text-anchor="middle" class="t-label muted" font-size="17">what you see</text></g>
+    <path class="ink draw" data-step="4" d="M910 160 H1070 M1058 152 L1070 160 L1058 168"/>
+    <g data-step="4"><g class="draw" data-step="4"><circle class="ink" cx="1150" cy="128" r="30"/><path class="ink" d="M1100 230 C1100 175 1200 175 1200 230"/></g>
+      <text x="1150" y="280" text-anchor="middle" class="serif" font-size="28">you</text><text x="1150" y="306" text-anchor="middle" class="t-label muted" font-size="17">drag · tune · approve</text></g>
+    <g data-step="5"><path class="ink acc draw" data-step="5" d="M1150 85 C1150 0 470 0 450 90 M440 76 L450 92 L462 78"/>
+      <text x="800" y="30" text-anchor="middle" class="hand" font-size="32">Copy ↩ paste back</text></g>
+    <g data-step="6"><path class="ink draw" data-step="6" d="M1170 320 C1150 400 140 400 115 330 M104 344 L115 328 L128 342" stroke-dasharray="7 7"/>
+      <text x="640" y="392" text-anchor="middle" class="hand" font-size="32">wrong? fix the skill, not the output</text></g>
+  </svg>
+  <p class="lede" data-step="7" style="font-size:46px;margin-top:40px">Skills make work <mark>repeatable</mark>. Artifacts make it <mark>visible</mark>.</p>
+</section>
+
+<section class="scene">
+  <p class="lede" style="margin-top:10px">Built the same interaction twice?</p>
+  <p class="lede accent" data-step="1">Freeze it into a skill.</p>
+  <p class="body" data-step="2" style="margin-top:8px">The data is disposable. <mark>The interaction is not.</mark></p>
+  <div class="row" style="gap:70px;margin-top:44px">
+    <div class="col" style="gap:20px;width:640px">
+      <div data-step="3"><code>/scene-deck</code> <span class="body" style="font-size:24px">→ this talk</span></div>
+      <div data-step="3"><code>/html-plan</code> <span class="body" style="font-size:24px">→ the plan you saw at the start</span></div>
+      <div data-step="3"><code>clip review</code> <span class="body" style="font-size:24px">→ Approve · Rework · Drop</span></div>
+    </div>
+    <div class="col" style="gap:20px;width:640px">
+      <div data-step="4"><code>/lesson-lab</code> <span class="body" style="font-size:24px">→ lessons with a quiz inside</span></div>
+      <div data-step="4"><code>/language-session</code> <span class="body" style="font-size:24px">→ a progress dashboard</span></div>
+      <div data-step="4"><code>/morning</code> · <code>/research-report</code> <span class="body" style="font-size:24px">→ briefs, reports</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5 · HOW TO BUILD ============ -->
+<section class="scene" data-chapter="How to build">
+  <h1>Five rules for a good artifact</h1>
+  <div class="row" style="gap:30px;margin-top:50px">
+    <div class="col" data-step="1" style="width:260px;gap:8px">
+      <svg width="120" height="120" viewBox="0 0 100 100" class="sketch"><g class="draw" data-step="1"><path class="ink" d="M25 10 H65 L80 25 V90 H25 Z M65 10 V25 H80 M35 45 H70 M35 58 H70 M35 71 H58"/></g></svg>
+      <span class="ex">One file</span><span class="cap">no build step, a few pinned CDN libs</span></div>
+    <div class="col" data-step="2" style="width:260px;gap:8px">
+      <svg width="120" height="120" viewBox="0 0 100 100" class="sketch"><g class="draw" data-step="2"><circle class="ink" cx="50" cy="50" r="38"/><circle class="ink" cx="50" cy="50" r="22"/><circle class="ink acc fill-acc" cx="50" cy="50" r="6"/></g></svg>
+      <span class="ex">One job</span><span class="cap">a page per decision, not an app</span></div>
+    <div class="col" data-step="3" style="width:260px;gap:8px">
+      <svg width="120" height="120" viewBox="0 0 100 100" class="sketch"><g class="draw" data-step="3"><rect class="ink" x="6" y="25" width="24" height="44" rx="3"/><rect class="ink acc" x="38" y="25" width="24" height="44" rx="3"/><rect class="ink" x="70" y="25" width="24" height="44" rx="3"/><ellipse class="ink acc" cx="50" cy="47" rx="20" ry="34"/></g></svg>
+      <span class="ex">Options side by side</span><span class="cap">fan out three, point at one</span></div>
+    <div class="col" data-step="4" style="width:260px;gap:8px">
+      <svg width="120" height="120" viewBox="0 0 100 100" class="sketch"><g class="draw" data-step="4"><path class="ink" d="M10 35 H90 M10 70 H90"/><circle class="ink fill-paper" cx="62" cy="35" r="9"/><circle class="ink fill-paper" cx="30" cy="70" r="9"/></g></svg>
+      <span class="ex">Inputs over prose</span><span class="cap">sliders, drag, toggles, text boxes</span></div>
+    <div class="col" data-step="5" style="width:260px;gap:8px">
+      <svg width="120" height="120" viewBox="0 0 100 100" class="sketch"><g class="draw" data-step="5"><rect class="ink acc" x="12" y="20" width="56" height="40" rx="4" style="fill:var(--accent-soft)"/><path class="ink acc" d="M72 40 C95 40 95 82 70 82 H30 M40 74 L30 82 L40 90"/></g></svg>
+      <span class="ex accent">End with export</span><span class="cap">a Copy button back to the agent</span></div>
+  </div>
+  <p class="hand abs" data-step="6" style="left:110px;top:600px;font-size:40px;rotate:-2deg">keep it a few hundred lines, so any model can rewrite it</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">rule 5, up close</span>
+  <h1>End with export</h1>
+  <div class="abs shot tl" data-step="1" style="left:90px;top:200px;width:640px"><img src="shots/own-hacklists-review.png" alt="post review with Keep, Reject and Copy"></div>
+  <svg class="abs sketch" style="left:752px;top:330px" width="120" height="80" viewBox="0 0 120 80"><path class="ink acc draw" data-step="2" d="M5 40 H105 M93 30 L107 40 L93 50"/></svg>
+  <span class="hand abs" data-step="2" style="left:760px;top:290px;font-size:30px">Copy</span>
+  <pre class="code abs" data-step="3" style="left:890px;top:220px;width:610px;font-size:19px">{ "keep":   ["post-1", "post-3"],
+  "reject": ["post-2"],
+  "why": {
+    "post-2": "the hook buries the number"
+  } }</pre>
+  <p class="hand abs" data-step="4" style="left:900px;top:450px;font-size:40px;rotate:-2deg">export the why, not just the picks</p>
+  <p class="body abs" data-step="5" style="left:900px;top:540px;width:600px;font-size:25px">Paste it into Claude Code.<br>The next agent gets a brief, not a list.</p>
+</section>
+
+<section class="scene">
+  <h1>Three sentences for your next prompt</h1>
+  <div class="col" style="gap:22px;margin-top:20px">
+    <div class="code" data-step="1" style="font-size:26px;width:1200px">“Make it <mark>one HTML file</mark>. No React, no build step.”</div>
+    <div class="code" data-step="2" style="font-size:26px;width:1200px">“Show me <mark>3 options side by side</mark> so I can point at one.”</div>
+    <div class="code" data-step="3" style="font-size:26px;width:1200px">“End with a <mark>Copy button</mark> that hands my choices back to you.”</div>
+  </div>
+  <p class="lede" data-step="4" style="font-size:44px;margin-top:50px">Built it twice? <span class="accent">Make it a skill.</span></p>
+</section>
+
+<!-- ============ 6 · MINE ============ -->
+<section class="scene" data-chapter="My artifacts">
+  <span class="kicker">the fun part</span>
+  <h1>Mine fall into four verbs</h1>
+  <div class="row" style="gap:60px;margin-top:70px">
+    <div class="col" data-step="1" style="width:290px"><span class="verb">Look</span><span class="cap" style="font-size:19px">briefs, reports, dashboards</span></div>
+    <div class="col" data-step="2" style="width:290px"><span class="verb">Decide</span><span class="cap" style="font-size:19px">reviews with buttons</span></div>
+    <div class="col" data-step="3" style="width:290px"><span class="verb">Learn</span><span class="cap" style="font-size:19px">lessons you can poke</span></div>
+    <div class="col" data-step="4" style="width:290px"><span class="verb accent">Play</span><span class="cap" style="font-size:19px">toys that teach</span></div>
+  </div>
+</section>
+
+<section class="scene">
+  <span class="kicker">1 · Look</span>
+  <h1>Things I read every day</h1>
+  <div class="row" style="gap:56px;margin-top:10px">
+    <div class="col" data-step="1" style="width:430px;gap:10px">
+      <svg width="430" height="230" viewBox="0 0 430 230" class="sketch">
+        <g class="draw" data-step="1"><path class="ink" d="M10 200 H420"/><path class="ink acc" d="M20 190 C80 190 100 150 140 150 C180 150 190 70 230 70 C270 70 280 120 310 120 C340 120 350 60 380 60 C400 60 410 150 420 190"/>
+          <circle class="ink" cx="40" cy="40" r="16"/><path class="ink" d="M40 12 V4 M40 68 V76 M12 40 H4 M68 40 H76"/><path class="ink" d="M400 22 A20 20 0 1 0 412 50 A15 15 0 0 1 400 22 Z"/></g>
+        <circle cx="140" cy="150" r="7" class="fill-acc" data-step="1"/><circle cx="230" cy="70" r="7" class="fill-acc" data-step="1"/><circle cx="380" cy="60" r="7" class="fill-acc" data-step="1"/>
+      </svg>
+      <span class="ex">Morning brief</span><span class="cap">Gmail + Calendar → one page: the day's shape, what needs you</span>
+    </div>
+    <div class="col" data-step="2" style="width:430px;gap:10px">
+      <svg width="430" height="230" viewBox="0 0 430 230" class="sketch">
+        <g class="draw" data-step="2"><path class="ink" d="M20 200 H420"/><rect class="ink acc" x="40" y="30" width="60" height="170" style="fill:var(--accent-soft)"/><rect class="ink" x="120" y="110" width="60" height="90" style="fill:url(#hatch)"/><rect class="ink" x="200" y="140" width="60" height="60" style="fill:url(#hatch)"/><rect class="ink" x="280" y="170" width="60" height="30" style="fill:url(#hatch)"/><rect class="ink" x="360" y="196" width="60" height="4"/></g>
+        <text x="70" y="20" text-anchor="middle" class="serif accent" font-size="22" data-step="2">15.2</text><text x="390" y="186" text-anchor="middle" class="serif" font-size="22" data-step="2">0.2</text>
+      </svg>
+      <span class="ex">LinkedIn post formulas</span><span class="cap">26 posts → 5 formulas · “Copy instructions” exports a skill</span>
+    </div>
+    <div class="col" data-step="3" style="width:430px;gap:10px">
+      <svg width="430" height="230" viewBox="0 0 430 230" class="sketch">
+        <g class="draw" data-step="3"><path class="ink" d="M30 10 V200 H420"/></g>
+        <g data-step="3"><circle class="ink" cx="80" cy="170" r="6"/><circle class="ink" cx="120" cy="150" r="6"/><circle class="ink" cx="150" cy="175" r="6"/><circle class="ink" cx="200" cy="120" r="6"/><circle class="ink" cx="260" cy="160" r="6"/><circle class="ink" cx="300" cy="90" r="6"/><circle class="ink" cx="350" cy="140" r="6"/><circle class="fill-acc" cx="240" cy="40" r="9"/><circle class="ink" cx="390" cy="180" r="6"/></g>
+        <text x="40" y="24" class="t-label muted" font-size="14" data-step="3">conversion ↑</text><text x="420" y="222" text-anchor="end" class="t-label muted" font-size="14" data-step="3">reach →</text>
+      </svg>
+      <span class="ex">Reach vs conversion</span><span class="cap">the LinkedIn export as a dashboard you can sort</span>
+    </div>
+  </div>
+  <p class="hand abs" data-step="4" style="left:110px;top:668px;font-size:34px">same skill, a new page every morning</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">1 · Look</span>
+  <h1>…and what they look like</h1>
+  <div class="row" style="gap:36px;margin-top:6px">
+    <div class="col" data-step="1" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/art-brief.png" alt="morning brief"></div>
+      <span class="ex" style="margin-top:10px">Morning brief</span><span class="cap">today's actual page</span>
+    </div>
+    <div class="col" data-step="2" style="width:450px;gap:8px">
+      <div class="shot tr" style="margin-top:20px"><img src="shots/art-formulas.png" alt="post formulas"></div>
+      <span class="ex" style="margin-top:10px">Post formulas</span><span class="cap">a year of posts, five templates</span>
+    </div>
+    <div class="col" data-step="3" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-report.png" alt="research report"></div>
+      <span class="ex" style="margin-top:10px">Research report</span><span class="cap">every claim links to the exact passage it came from</span>
+    </div>
+  </div>
+</section>
+
+<section class="scene">
+  <span class="kicker">2 · Decide</span>
+  <h1>Reviews with buttons</h1>
+  <div class="row" style="gap:36px;margin-top:6px">
+    <div class="col" data-step="1" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-hooks-review.png" alt="viral hooks review"></div>
+      <span class="ex" style="margin-top:10px">Hook review</span><span class="cap">20 reels · Keep / Maybe / Skip · copy keeps as Markdown</span>
+    </div>
+    <div class="col" data-step="2" style="width:450px;gap:8px">
+      <div class="shot tr" style="margin-top:20px"><img src="shots/own-thumb-review.png" alt="thumbnail review"></div>
+      <span class="ex" style="margin-top:10px">Thumbnail redesign</span><span class="cap">before / after, approve or rework</span>
+    </div>
+    <div class="col" data-step="3" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-fold-review.png" alt="LinkedIn draft review"></div>
+      <span class="ex" style="margin-top:10px">Draft review</span><span class="cap">edit the post in place · Approve → queue</span>
+    </div>
+  </div>
+  <p class="hand abs" data-step="4" style="left:1060px;top:668px;font-size:42px;rotate:-2deg">the click is the review</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">3 · Learn</span>
+  <h1>Lessons you can poke</h1>
+  <div class="row" style="gap:36px;margin-top:6px">
+    <div class="col" data-step="1" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-lesson.png" alt="lesson lab"></div>
+      <span class="ex" style="margin-top:10px">Lesson lab</span><span class="cap">reading list + inline quiz, no tab switching</span>
+    </div>
+    <div class="col" data-step="2" style="width:450px;gap:8px">
+      <div class="shot tr" style="margin-top:20px"><img src="shots/own-french.png" alt="French tracker"></div>
+      <span class="ex" style="margin-top:10px">French tracker</span><span class="cap">my common mistakes, hidden until I test myself</span>
+    </div>
+    <div class="col" data-step="3" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/art-rhythm.png" alt="Rhythm Lanes"></div>
+      <span class="ex" style="margin-top:10px">Rhythm Lanes</span><span class="cap">3-against-2 on piano, with a metronome</span>
+      <a class="live" href="https://claude.ai/artifact/1Q7gftpvjJYqYrBVBMXWwy" target="_blank">open ↗</a>
+    </div>
+  </div>
+  <p class="label abs" data-step="4" style="left:90px;top:700px">also: an 11-second explainer animation, muffins into cookies · <a class="live" href="https://claude.ai/artifact/359121i26u6Gkix7XQNcYD" target="_blank">open ↗</a></p>
+</section>
+
+<section class="scene">
+  <span class="kicker">4 · Play</span>
+  <h1>Toys that teach</h1>
+  <div class="row" style="gap:36px;margin-top:6px">
+    <div class="col" data-step="1" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-rocket.png" alt="rocket design lab"></div>
+      <span class="ex" style="margin-top:10px">Rocket design lab</span><span class="cap">drag the fins, watch the stability margin</span>
+    </div>
+    <div class="col" data-step="2" style="width:450px;gap:8px">
+      <div class="shot tr" style="margin-top:20px"><img src="shots/art-mirage.png" alt="Mirage rulebook"></div>
+      <span class="ex" style="margin-top:10px">Mirage rulebook</span><span class="cap">rules for an AI party game, with a playable round</span>
+      <a class="live" href="https://claude.ai/artifact/RsrDRPrS7B2a21cjRbeiQJ" target="_blank">open ↗</a>
+    </div>
+    <div class="col" data-step="3" style="width:450px;gap:8px">
+      <div class="shot tl"><img src="shots/own-montecillo.png" alt="Montecillo 3D"></div>
+      <span class="ex" style="margin-top:10px">A street plan in 3D</span><span class="cap">bike lanes from the mobility plan, on the real map</span>
+    </div>
+  </div>
+  <p class="hand abs" data-step="4" style="left:1000px;top:668px;font-size:40px;rotate:-2deg">not products · one session each</p>
+</section>
+
+<section class="scene">
+  <span class="kicker">seen on X · Konstantin Saifo</span>
+  <h1>A floor plan becomes a warehouse</h1>
+  <div class="row" style="gap:44px;margin-top:4px">
+    <div class="shot" data-step="1" style="width:1040px;padding:6px;flex:none"><img src="shots/plan-to-twin.jpg" alt="floor plan to 3D twin"></div>
+    <div class="col" style="gap:22px;margin-top:6px">
+      <span class="body" data-step="1" style="font-size:23px"><b class="accent" style="font-weight:500">1</b>&nbsp; a floor plan image</span>
+      <span class="body" data-step="2" style="font-size:23px"><b class="accent" style="font-weight:500">2</b>&nbsp; Claude traces it into one spec file</span>
+      <span class="body" data-step="3" style="font-size:23px"><b class="accent" style="font-weight:500">3</b>&nbsp; the engine builds a live 3D twin</span>
+      <span class="body" data-step="4" style="font-size:23px"><b class="accent" style="font-weight:500">4</b>&nbsp; every number comes from the sim</span>
+    </div>
+  </div>
+  <p class="label abs" data-step="5" style="left:90px;top:640px;font-size:18px">my version: <code>plant-twin new plan.png</code> · <a class="live" href="https://x.com/konstantinsaifo/status/2112103898693427587" target="_blank">original post ↗</a></p>
+</section>
+
+<section class="scene">
+  <span class="kicker">and the rest</span>
+  <h1>One folder, 89 apps</h1>
+  <div class="abs shot tl" data-step="1" style="left:90px;top:200px;width:820px"><img src="shots/own-apps-index.png" alt="apps index"></div>
+  <div class="abs col" style="left:980px;top:220px;width:520px;gap:26px">
+    <p class="body" data-step="2" style="font-size:26px"><b style="font-weight:500">39</b> show up in a real workflow: a skill, an alias, a note.</p>
+    <p class="body" data-step="3" style="font-size:26px">The rest were one-offs. <mark>That's fine.</mark></p>
+    <p class="hand" data-step="4" style="font-size:40px;rotate:-2deg">cheap to make, cheap to throw away</p>
+  </div>
+</section>
+
+<!-- ============ 7 · CLOSE ============ -->
+<section class="scene" data-chapter="Close">
+  <p class="lede" style="font-size:80px;margin-top:150px">Stop <s data-fx="1">reading</s> your agent.</p>
+  <p class="lede" data-step="1" style="font-size:80px">Start <mark>playing</mark> with it.</p>
+  <p class="label abs" data-step="1" style="left:90px;top:640px;font-size:18px">Thank you · Agent Skills Live · Lucas Soares &amp; Louis-François Bouchard</p>
+</section>
+
+<!-- ===================== SCENES END ======================= -->
+  <div id="timeline"><div class="rail"></div><div class="fill"></div>
+    <div id="mascot"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 12 C7 4.5 25 4.5 25 12 V22 C25 28.5 7 28.5 7 22 Z" style="fill:var(--paper)"/>
+      <path d="M8.5 8.5 L7 2.5 L12 6 M23.5 8.5 L25 2.5 L20 6"/>
+      <path d="M7 15 C4.5 18 5 23 8.5 25.5 M25 15 C27.5 18 27 23 23.5 25.5"/>
+      <circle cx="12" cy="12.5" r="3.7" style="fill:var(--paper)"/><circle cx="20" cy="12.5" r="3.7" style="fill:var(--paper)"/>
+      <circle class="eye" cx="12.5" cy="12.8" r="1.6" fill="currentColor" stroke="none"/><circle class="eye" cx="20.5" cy="12.8" r="1.6" fill="currentColor" stroke="none"/>
+      <path d="M15 15.6 L16 18.4 L17 15.6 Z" style="fill:var(--accent)" stroke="none"/>
+      <path d="M12 21 q1.3 1.3 2.6 0 q1.3 1.3 2.6 0 q1.3 1.3 2.6 0 M13.3 24 q1.3 1.3 2.6 0 q1.3 1.3 2.6 0" stroke-width="1"/>
+      <path d="M13 28 v2.5 M19 28 v2.5" style="stroke:var(--accent)"/>
+    </svg></div>
+  </div>
+</div>
+
+<script>
+/* ===== scene-deck engine (no edits needed) ===== */
+(() => {
+  const stage = document.getElementById('stage');
+  const scenes = [...document.querySelectorAll('.scene')];
+  const SHAPES = 'path,line,polyline,polygon,circle,ellipse,rect';
+  const KEYS = ['step', 'fx', 'dim', 'out'];
+
+  // Prep draw-on shapes: measure stroke length, stagger children.
+  document.querySelectorAll('.draw').forEach(g => {
+    if (!g.hasAttribute('data-step')) g.dataset.step = 0;
+    const shapes = g.matches(SHAPES) ? [g] : [...g.querySelectorAll(SHAPES)];
+    shapes.forEach((s, i) => {
+      if (s.getAttribute('stroke-dasharray')) return s.classList.add('draw-fade'); // keep authored dashes; fade instead
+      s.classList.add('draw-shape');
+      s.style.setProperty('--len', Math.ceil(s.getTotalLength ? s.getTotalLength() : 2000) + 1);
+      if (!s.style.getPropertyValue('--i')) s.style.setProperty('--i', i);
+    });
+  });
+
+  // Flatten scenes into a global step list; chapters start at scenes with data-chapter.
+  const steps = [], chapters = [];
+  scenes.forEach((sc, i) => {
+    const nums = [...sc.querySelectorAll(KEYS.map(k => `[data-${k}]`).join())]
+      .flatMap(e => KEYS.map(k => +e.dataset[k] || 0));
+    const n = Math.max(0, ...nums);
+    if (sc.dataset.chapter || !chapters.length) chapters.push({ title: sc.dataset.chapter || '', start: steps.length });
+    for (let k = 0; k <= n; k++) steps.push([i, k]);
+  });
+  const last = Math.max(1, steps.length - 1);
+
+  // Timeline dots
+  const tl = document.getElementById('timeline'), fill = tl.querySelector('.fill'), mascot = document.getElementById('mascot');
+  const dots = chapters.map((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot'; d.style.left = (c.start / last * 100) + '%';
+    d.innerHTML = `<b>${i + 1}</b>` + (c.title ? `<i>${c.title}</i>` : '');
+    tl.appendChild(d); return d;
+  });
+
+  function apply(sc, k) {
+    for (const e of sc.querySelectorAll('[data-step]')) e.classList.toggle('on', k >= +e.dataset.step);
+    for (const e of sc.querySelectorAll('[data-fx]')) e.classList.toggle('fx-on', k >= +e.dataset.fx);
+    for (const e of sc.querySelectorAll('[data-dim]')) e.classList.toggle('dimmed', k >= +e.dataset.dim);
+    for (const e of sc.querySelectorAll('[data-out]')) e.classList.toggle('gone', k >= +e.dataset.out);
+  }
+  function instant(sc, k) { sc.classList.add('reset'); apply(sc, k); sc.offsetWidth; sc.classList.remove('reset'); }
+  scenes.forEach(sc => instant(sc, -1));
+
+  let cur = -1, active = -1;
+  const timers = new Map();
+  function go(g, animate = true) {
+    g = Math.max(0, Math.min(steps.length - 1, g | 0));
+    if (g === cur) return;
+    const forward = g > cur, [si, k] = steps[g];
+    if (si !== active) {
+      const old = scenes[active];
+      if (old) { old.classList.remove('active'); timers.set(old, setTimeout(() => instant(old, -1), 500)); }
+      const sc = scenes[si];
+      clearTimeout(timers.get(sc));
+      // Entering a scene mid-way (going back / seeking) shows its state at once.
+      instant(sc, animate && forward && k === 0 ? -1 : k);
+      sc.classList.add('active'); active = si;
+    }
+    apply(scenes[si], k);
+    mascot.classList.toggle('back', !forward && cur !== -1);
+    if (cur !== -1) { mascot.classList.add('walk'); clearTimeout(go.w); go.w = setTimeout(() => mascot.classList.remove('walk'), 550); }
+    cur = g;
+    const pct = cur / last * 100 + '%';
+    fill.style.width = pct; mascot.style.left = pct;
+    dots.forEach((d, i) => d.classList.toggle('past', chapters[i].start <= cur));
+    history.replaceState(null, '', '#' + cur);
+  }
+
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const K = e.key;
+    if (['ArrowRight', 'ArrowDown', ' ', 'PageDown', 'Enter'].includes(K)) go(cur + 1);
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(K)) go(cur - 1);
+    else if (K === 'Home') go(0);
+    else if (K === 'End') go(steps.length - 1);
+    else if (/^[1-9]$/.test(K) && chapters[K - 1]) go(chapters[K - 1].start);
+    else if (K === 'f') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    else return;
+    e.preventDefault();
+  });
+
+  // Click or drag the timeline to scrub.
+  const seek = e => { const r = tl.getBoundingClientRect(); go(Math.round((e.clientX - r.left) / r.width * last)); };
+  tl.addEventListener('pointerdown', e => { tl.setPointerCapture(e.pointerId); seek(e); tl.onpointermove = seek; });
+  tl.addEventListener('pointerup', () => tl.onpointermove = null);
+
+  const fit = () => { const s = Math.min(innerWidth / 1600, innerHeight / 900); stage.style.transform = `translate(-50%,-50%) scale(${s})`; };
+  addEventListener('resize', fit); fit();
+  const h = +location.hash.slice(1) || 0; go(h, h === 0);
+  window.deck = { go, steps, chapters, get cur() { return cur; } };
+})();
+</script>
+</body>
+</html>
